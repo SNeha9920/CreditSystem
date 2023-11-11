@@ -146,12 +146,22 @@ async function create_loan(request_body){
   }
 
   const  monthly_inst = (request_body.loan_amount/request_body.tenure)+ (((request_body.loan_amount*((request_body.tenure)/12)*int_rate)/100)/request_body.tenure); 
-  
+  const start_d = new Date().toISOString().split('T')[0];
+  let end_d = new Date();
+  let add_year = request_body.tenure/12;
+  let add_month = request_body.tenure%12;
+  end_d.setMonth(end_d.getMonth() + add_month);
+  end_d.setFullYear(end_d.getFullYear() + add_year);
+  end_d = end_d.toISOString().split('T')[0];
+  function getRndInteger(min, max) {
+    return Math.floor(Math.random() * (max - min + 1) ) + min;
+  }
+
   const load = await db.query(
     `INSERT INTO loan_data 
     (customer_id, loan_id, loan_amount, tenure, interest_rate, monthly_payment, EMIs_paid_on_Time, start_date, end_date) 
     VALUES 
-    (${request_body.customer_id}, 0000, ${request_body.loan_amount}, ${request_body.tenure}, ${int_rate}, ${monthly_inst}, 0, 2002-07-16, 2002-07-16)`
+    (${request_body.customer_id}, ${getRndInteger(1000,9999)}, ${request_body.loan_amount}, ${request_body.tenure}, ${int_rate}, ${monthly_inst}, 0, '${start_d}', '${end_d}')`
   );
 
   let message = 'Error in creating loan';
@@ -194,11 +204,14 @@ async function make_payment(customer_id, loan_id, amount){
   const data = result[0];
   const new_emi = data.EMIs_paid_on_Time + 1;
   let new_monthly_payment = data.monthly_payment;
+  let m = 'equal';
   if (amount.value < data.monthly_payment){
-    new_monthly_payment = ((data.monthly_payment - amount.value)/(data.tenure - data.EMIs_paid_on_Time)) + data.monthly_payment;
+    m = 'less';
+    new_monthly_payment = ((data.monthly_payment - amount.value)/(data.tenure - new_emi)) + data.monthly_payment;
   }
   else if (amount.value > data.monthly_payment){
-    new_monthly_payment = ((amount.value - data.monthly_payment)/(data.tenure - data.EMIs_paid_on_Time)) - data.monthly_payment;
+    m = 'more';
+    new_monthly_payment = data.monthly_payment - ((amount.value - data.monthly_payment)/(data.tenure - new_emi));
   }
 
   const result1 = await db.query(
@@ -213,7 +226,7 @@ async function make_payment(customer_id, loan_id, amount){
     message = 'Payment processed sucessfully';
   }
 
-  return {message, new_monthly_payment, new_emi};
+  return {message, new_monthly_payment, new_emi, m};
 }
 
 async function view_statement(customer_id, loan_id){
